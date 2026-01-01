@@ -5,7 +5,7 @@ import os
 
 # --- CONFIGURATION ---
 DATA_FILE = "life_metrics.csv"
-MY_PASSWORD = "Spartan"  # <--- PASSWORD
+MY_PASSWORD = "Irish02!!"  # <--- PASSWORD
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Life Master Grid", page_icon="🛡️", layout="wide")
@@ -204,3 +204,4 @@ if os.path.isfile(DATA_FILE):
 
 else:
     st.info("👋 Welcome! Log your first day in the sidebar to see the Grid.")
+
