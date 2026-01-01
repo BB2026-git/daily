@@ -1,17 +1,17 @@
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 
 # --- CONFIGURATION ---
 DATA_FILE = "life_metrics.csv"
-# *** SECURITY: CHANGE THIS PASSWORD ***
-MY_PASSWORD = "Irish02" 
+MY_PASSWORD = "Irish02!!"  # <--- REMEMBER TO CHANGE THIS IF NEEDED
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="My Life OS", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="Life OS", page_icon="🛡️", layout="wide")
 
-# --- AUTHENTICATION (PASSWORD CHECK) ---
+# --- AUTHENTICATION ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
@@ -25,101 +25,86 @@ def check_password():
 if not st.session_state.authenticated:
     st.title("🔒 Login Required")
     st.text_input("Enter Password", type="password", key="password_input", on_change=check_password)
-    st.stop()  # Stop code execution here until logged in
+    st.stop()
 
-# --- APP BEGINS HERE (Only runs if password is correct) ---
+# --- HELPER FUNCTIONS ---
+def get_exercise_code(exercise_str):
+    """Returns a single letter code for the calendar."""
+    if pd.isna(exercise_str) or exercise_str == "Rest":
+        return ""
+    if "Lifting" in exercise_str: return "L"
+    if "Running" in exercise_str: return "R"
+    if "Rucking" in exercise_str: return "K"
+    if "Walking" in exercise_str: return "W"
+    return "O" # Other
+
+# --- APP BEGINS ---
 st.title("🛡️ Life Operating System")
 
-# --- SIDEBAR: NEW ENTRY ---
+# --- SIDEBAR: LOGGING ---
 with st.sidebar:
     st.header("📝 Log Today")
     with st.form("tracker_form", clear_on_submit=True):
-        
-        # Date Logic
         date = st.date_input("Date", datetime.now())
         st.caption(f"Logging for: {date.strftime('%A, %B %d')}")
         
-        # 1. SLEEP (Clarified)
+        # SLEEP
         st.subheader("💤 Sleep")
-        st.caption("Sleep logged today = The sleep you got last night.")
-        sleep_hours = st.number_input("Hours Slept", 0.0, 24.0, 7.0, step=0.5)
+        st.caption("Last night's sleep:")
+        sleep_hours = st.number_input("Hours", 0.0, 24.0, 7.0, step=0.5)
         sleep_quality = st.selectbox("Quality", ["Good", "Neutral", "Bad"])
         
-        # 2. VITALITY & HEALTH
-        st.subheader("⚡ Vitality & Health")
-        happiness = st.slider("Happiness (1-10)", 1, 10, 7)
-        energy_level = st.slider("Energy (1-10)", 1, 10, 5)
-        headache = st.checkbox("Headache today?")
+        # HEALTH
+        st.subheader("⚡ Vitality")
+        happiness = st.slider("Happiness", 1, 10, 7)
+        energy_level = st.slider("Energy", 1, 10, 5)
+        headache = st.checkbox("Headache?")
         
-        st.markdown("**Vitamins Taken:**")
+        st.markdown("**Vitamins:**")
         c1, c2, c3, c4 = st.columns(4)
-        vit_d = c1.checkbox("Vit D")
-        vit_m = c2.checkbox("Multi")
-        vit_c = c3.checkbox("Vit C")
-        vit_z = c4.checkbox("Zinc")
+        vit_d = c1.checkbox("D"); vit_m = c2.checkbox("Multi"); vit_c = c3.checkbox("C"); vit_z = c4.checkbox("Zn")
         
-        st.markdown("**Gut Health:**")
         heartburn = st.checkbox("Heartburn?")
-        heartburn_notes = st.text_input("Heartburn Triggers (Food/Time)", disabled=not heartburn, placeholder="e.g., Pizza at 8pm")
+        heartburn_notes = st.text_input("Triggers", disabled=not heartburn)
 
-        # 3. PHYSIO
+        # PHYSIO
         st.subheader("🏋️ Physio")
-        exercise_done = st.radio("Did you exercise?", ["Yes", "No / Rest Day"], horizontal=True)
-        
-        # Logic to hide details if Rest Day
+        exercise_done = st.radio("Exercise?", ["Yes", "No / Rest"], horizontal=True)
         is_exercise = (exercise_done == "Yes")
-        exercise_time = st.selectbox("Time of Day", ["Morning", "Midday", "Evening"], disabled=not is_exercise)
+        exercise_time = st.selectbox("Time", ["Morning", "Midday", "Evening"], disabled=not is_exercise)
         exercise_type = st.multiselect("Type", ["Lifting", "Running", "Rucking", "Walking", "Other"], disabled=not is_exercise)
         stretching = st.checkbox("Stretching?")
 
-        # 4. LIFESTYLE
+        # LIFESTYLE
         st.subheader("🍸 Lifestyle")
-        drinks = st.number_input("Alcoholic Drinks", min_value=0, step=1)
-        luck = st.checkbox("Did you feel 'Lucky' today?")
-
-        # 5. MIND
+        drinks = st.number_input("Alcohol Drinks", min_value=0, step=1)
+        luck = st.checkbox("Felt Lucky?")
+        
+        # MIND
         st.subheader("🧘 Mind")
-        meditate = st.checkbox("Did you meditate?")
-        # Step=1 allows 1 minute increments
+        meditate = st.checkbox("Meditated?")
         meditate_min = st.number_input("Minutes", min_value=0, step=1, disabled=not meditate)
-        gratitude = st.text_input("Gratitude (One sentence)")
+        gratitude = st.text_input("Gratitude")
         
         submitted = st.form_submit_button("Save Entry")
 
         if submitted:
-            # Combine Vitamins into string
-            vits = []
-            if vit_d: vits.append("D")
-            if vit_m: vits.append("Multi")
-            if vit_c: vits.append("C")
-            if vit_z: vits.append("Zinc")
+            # Process Data
+            vits = [n for n, v in [("D", vit_d), ("Multi", vit_m), ("C", vit_c), ("Zinc", vit_z)] if v]
             vits_str = ", ".join(vits) if vits else "None"
             
-            # Combine Exercise
-            if not is_exercise:
-                ex_final = "Rest"
-                time_final = "N/A"
-            else:
-                ex_final = ", ".join(exercise_type) if exercise_type else "Unspecified"
-                time_final = exercise_time
+            ex_final = ", ".join(exercise_type) if (is_exercise and exercise_type) else "Rest"
+            time_final = exercise_time if is_exercise else "N/A"
 
             new_entry = {
                 "Date": date,
-                "Sleep Hours": sleep_hours,
-                "Sleep Quality": sleep_quality,
-                "Happiness": happiness,
-                "Energy": energy_level,
-                "Headache": headache,
-                "Vitamins": vits_str,
-                "Heartburn": heartburn,
-                "Heartburn Notes": heartburn_notes if heartburn else "N/A",
-                "Exercise": ex_final,
-                "Workout Time": time_final,
-                "Stretching": stretching,
-                "Drinks": drinks,
-                "Meditate Min": meditate_min if meditate else 0,
-                "Gratitude": gratitude,
-                "Luck": luck
+                "Sleep Hours": sleep_hours, "Sleep Quality": sleep_quality,
+                "Happiness": happiness, "Energy": energy_level,
+                "Headache": headache, "Vitamins": vits_str,
+                "Heartburn": heartburn, "Heartburn Notes": heartburn_notes if heartburn else "N/A",
+                "Exercise": ex_final, "Workout Time": time_final, "Stretching": stretching,
+                "Drinks": drinks, "Meditate Min": meditate_min if meditate else 0,
+                "Gratitude": gratitude, "Luck": luck
             }
             
             df_new = pd.DataFrame([new_entry])
@@ -129,83 +114,123 @@ with st.sidebar:
             else:
                 df_new.to_csv(DATA_FILE, mode='a', header=False, index=False)
             st.success("Saved!")
-            st.rerun() # Force refresh to show new data immediately
+            st.rerun()
 
-# --- MAIN DASHBOARD TABS ---
-tab1, tab2, tab3 = st.tabs(["📊 Data Manager", "🤖 AI Coach Prep", "📈 Trends"])
+# --- DASHBOARD TABS ---
+tab1, tab2, tab3, tab4 = st.tabs(["🗓️ Calendar View", "📊 Data Manager", "🤖 AI Coach", "📈 Trends"])
 
-# --- TAB 1: DATA MANAGER (EDIT/DELETE) ---
+# --- TAB 1: CALENDAR HEATMAP ---
 with tab1:
-    st.subheader("🗂️ View & Edit Data")
+    st.subheader("Month at a Glance")
+    
     if os.path.isfile(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
-        df['Date'] = pd.to_datetime(df['Date']).dt.date # format date cleanly
+        df['Date'] = pd.to_datetime(df['Date'])
         
-        # EDITABLE DATAFRAME
-        edited_df = st.data_editor(
-            df, 
-            num_rows="dynamic", # Allow adding/deleting rows
-            use_container_width=True,
-            key="editor"
+        # Filter for current month view (or all time)
+        # For simplicity, we show the last 30 days or handle it via Plotly logic
+        
+        # VIEW SELECTOR
+        view_option = st.selectbox("Select Lens:", ["Alcohol & Vices", "Exercise & Physio", "Sleep & Energy"])
+        
+        # Prepare Data for Heatmap
+        # We need to map Date -> Day of Week (x) and Week Number (y)
+        df = df.sort_values("Date")
+        
+        # Create a full date range to ensure the calendar looks square (handle missing days)
+        if not df.empty:
+            full_range = pd.date_range(start=df['Date'].min(), end=df['Date'].max(), freq='D')
+            df_cal = df.set_index('Date').reindex(full_range).reset_index()
+            df_cal = df_cal.rename(columns={'index': 'Date'})
+        else:
+            df_cal = df
+
+        # Calculate coordinates
+        df_cal['Week'] = df_cal['Date'].dt.isocalendar().week
+        df_cal['Day'] = df_cal['Date'].dt.weekday # 0=Mon, 6=Sun
+        df_cal['Day Name'] = df_cal['Date'].dt.strftime('%a')
+        df_cal['Date Str'] = df_cal['Date'].dt.strftime('%b %d')
+
+        # Logic for each View
+        if view_option == "Alcohol & Vices":
+            z_data = df_cal['Drinks'].fillna(0)
+            text_data = df_cal['Drinks'].apply(lambda x: str(int(x)) if x > 0 else "")
+            colors = 'Reds' # Red scale
+            title = "Alcohol Intake (Red = Drank)"
+            
+        elif view_option == "Exercise & Physio":
+            # Map exercise strings to 1 (green) or 0 (white)
+            z_data = df_cal['Exercise'].apply(lambda x: 0 if (pd.isna(x) or x == "Rest") else 1)
+            # Get the code letter
+            text_data = df_cal['Exercise'].apply(get_exercise_code)
+            colors = 'Greens'
+            title = "Workout Consistency (Letter = Type)"
+            
+        elif view_option == "Sleep & Energy":
+            z_data = df_cal['Sleep Hours'].fillna(0)
+            text_data = df_cal['Sleep Hours'].apply(lambda x: str(x) if x > 0 else "")
+            colors = 'Blues'
+            title = "Sleep Duration (Darker = More)"
+
+        # PLOTLY HEATMAP
+        fig = go.Figure(data=go.Heatmap(
+            z=z_data,
+            x=df_cal['Day Name'],
+            y=df_cal['Week'],
+            text=text_data,
+            texttemplate="%{text}", # Show the text inside the square
+            textfont={"size": 14, "color": "grey"}, # visible on dark or light
+            colorscale=colors,
+            xgap=3, # space between squares
+            ygap=3,
+            showscale=False
+        ))
+
+        fig.update_layout(
+            title=title,
+            height=400,
+            yaxis=dict(title="Week #", dtick=1, autorange="reversed"), # Weeks go down
+            xaxis=dict(side="top") # Days on top
         )
         
-        # Save Button
-        if st.button("💾 Save Changes to CSV"):
-            edited_df.to_csv(DATA_FILE, index=False)
-            st.success("Database updated successfully!")
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("No data yet. Log your first day in the sidebar!")
+        st.info("Log data to see the calendar!")
 
-# --- TAB 2: AI COACH PREP ---
+# --- TAB 2: DATA MANAGER ---
 with tab2:
-    st.subheader("🤖 AI Analysis Prompt")
-    st.write("Click the button below to generate a report. Copy it and paste it into ChatGPT/Gemini for personalized coaching.")
-    
-    if os.path.isfile(DATA_FILE) and len(df) > 0:
-        if st.button("Generate Coach Report"):
-            # Prepare summary stats
-            avg_sleep = df['Sleep Hours'].mean()
-            avg_happy = df['Happiness'].mean()
-            total_drinks = df['Drinks'].sum()
-            workouts = len(df[df['Exercise'] != "Rest"])
+    if os.path.isfile(DATA_FILE):
+        df = pd.read_csv(DATA_FILE)
+        edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+        if st.button("💾 Save Changes"):
+            edited_df.to_csv(DATA_FILE, index=False)
+            st.success("Updated!")
+
+# --- TAB 3: AI COACH ---
+with tab3:
+    st.subheader("🤖 Coach Prompt Generator")
+    if os.path.isfile(DATA_FILE):
+        if st.button("Create Report"):
+            df = pd.read_csv(DATA_FILE)
+            recent = df.tail(14).to_string() # Last 14 days
+            stats = df.describe().to_string()
             
-            # Get last 7 entries as text
-            recent_data = df.tail(7).to_string()
-            
-            # Create the Prompt
             prompt = f"""
-I need you to act as my Life Coach. Analyze my data from the last week and give me 3 specific observations and 1 actionable piece of advice for next week.
-
-**My Stats:**
-- Average Sleep: {avg_sleep:.1f} hours
-- Average Happiness: {avg_happy:.1f}/10
-- Total Alcohol: {total_drinks} drinks
-- Workouts: {workouts}
-
-**Detailed Logs (Last 7 Days):**
-{recent_data}
-
-**Focus on:** 1. The relationship between my sleep, alcohol, and happiness.
-2. If my workouts are consistent.
-3. Any patterns causing heartburn or headaches.
+            Act as my Life Coach. Here is my last 14 days of data:
+            {recent}
+            
+            Aggregate Stats:
+            {stats}
+            
+            Analyze:
+            1. My Sleep vs Alcohol correlation.
+            2. Workout consistency (I want to lift 3x/week).
+            3. Identify any 'Red Flag' days where I crashed.
             """
             st.code(prompt, language="text")
-    else:
-        st.warning("Log some data first!")
 
-# --- TAB 3: TRENDS ---
-with tab3:
-    if os.path.isfile(DATA_FILE) and len(df) > 0:
-        st.subheader("Mood vs. Habits")
-        
-        # Simple Chart
-        chart_data = df.set_index("Date")[['Happiness', 'Energy', 'Sleep Hours']]
-        st.line_chart(chart_data)
-        
-        # Heartburn Analysis
-        if df['Heartburn'].sum() > 0:
-            st.subheader("🔥 Heartburn Tracker")
-            st.write("Recent triggers:")
-            st.dataframe(df[df['Heartburn'] == True][['Date', 'Heartburn Notes', 'Drinks']])
-    else:
-        st.write("Trends will appear here once you have data.")
+# --- TAB 4: TRENDS ---
+with tab4:
+    if os.path.isfile(DATA_FILE):
+        df = pd.read_csv(DATA_FILE)
+        st.line_chart(df.set_index("Date")[['Energy', 'Happiness', 'Sleep Hours']])
