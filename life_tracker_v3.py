@@ -1,15 +1,14 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 
 # --- CONFIGURATION ---
 DATA_FILE = "life_metrics.csv"
-MY_PASSWORD = "Irish02!!"  # <--- REMEMBER TO CHANGE THIS IF NEEDED
+MY_PASSWORD = "Spartan"  # <--- PASSWORD
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Life OS", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="Life Master Grid", page_icon="🛡️", layout="wide")
 
 # --- AUTHENTICATION ---
 if "authenticated" not in st.session_state:
@@ -27,88 +26,78 @@ if not st.session_state.authenticated:
     st.text_input("Enter Password", type="password", key="password_input", on_change=check_password)
     st.stop()
 
-# --- HELPER FUNCTIONS ---
+# --- HELPER: GET EXERCISE LETTER ---
 def get_exercise_code(exercise_str):
-    """Returns a single letter code for the calendar."""
-    if pd.isna(exercise_str) or exercise_str == "Rest":
+    if pd.isna(exercise_str) or exercise_str == "Rest" or exercise_str == "None":
         return ""
-    if "Lifting" in exercise_str: return "L"
-    if "Running" in exercise_str: return "R"
-    if "Rucking" in exercise_str: return "K"
-    if "Walking" in exercise_str: return "W"
-    return "O" # Other
+    codes = []
+    if "Lifting" in exercise_str: codes.append("L")
+    if "Running" in exercise_str: codes.append("R")
+    if "Rucking" in exercise_str: codes.append("K")
+    if "Walking" in exercise_str: codes.append("W")
+    if "Other" in exercise_str: codes.append("O")
+    return "+".join(codes) if codes else "✓"
+
+# --- COLORING LOGIC FOR THE GRID ---
+def color_grid(val):
+    """
+    This function looks at the value in a cell and decides the background color.
+    Format: 'attribute: value'
+    """
+    color = ''
+    try:
+        # HANDLING NUMBERS (Sleep, Drinks, etc)
+        if isinstance(val, (int, float)):
+            return '' # Let numbers handle themselves below if needed, or specific logic
+    except:
+        pass
+    
+    # We use a trick: The cell value will carry the meaning. 
+    # But for a pandas style, we need to know WHICH row we are in.
+    # Since we can't easily know the row index inside this simple function,
+    # we will apply styling differently below.
+    return ''
 
 # --- APP BEGINS ---
-st.title("🛡️ Life Operating System")
+st.title("🛡️ Life Master Grid")
 
-# --- SIDEBAR: LOGGING ---
+# --- SIDEBAR: LOGGING (SAME AS BEFORE) ---
 with st.sidebar:
     st.header("📝 Log Today")
     with st.form("tracker_form", clear_on_submit=True):
         date = st.date_input("Date", datetime.now())
-        st.caption(f"Logging for: {date.strftime('%A, %B %d')}")
+        st.caption(f"Log for: {date.strftime('%b %d')}")
         
-        # SLEEP
-        st.subheader("💤 Sleep")
-        st.caption("Last night's sleep:")
-        sleep_hours = st.number_input("Hours", 0.0, 24.0, 7.0, step=0.5)
-        sleep_quality = st.selectbox("Quality", ["Good", "Neutral", "Bad"])
+        st.subheader("💤 Sleep & Health")
+        sleep_hours = st.number_input("Sleep Hours", 0.0, 24.0, 7.0, step=0.5)
+        energy_level = st.slider("Energy (1-10)", 1, 10, 5)
         
-        # HEALTH
-        st.subheader("⚡ Vitality")
-        happiness = st.slider("Happiness", 1, 10, 7)
-        energy_level = st.slider("Energy", 1, 10, 5)
-        headache = st.checkbox("Headache?")
-        
-        st.markdown("**Vitamins:**")
-        c1, c2, c3, c4 = st.columns(4)
-        vit_d = c1.checkbox("D"); vit_m = c2.checkbox("Multi"); vit_c = c3.checkbox("C"); vit_z = c4.checkbox("Zn")
-        
-        heartburn = st.checkbox("Heartburn?")
-        heartburn_notes = st.text_input("Triggers", disabled=not heartburn)
-
-        # PHYSIO
         st.subheader("🏋️ Physio")
         exercise_done = st.radio("Exercise?", ["Yes", "No / Rest"], horizontal=True)
-        is_exercise = (exercise_done == "Yes")
-        exercise_time = st.selectbox("Time", ["Morning", "Midday", "Evening"], disabled=not is_exercise)
-        exercise_type = st.multiselect("Type", ["Lifting", "Running", "Rucking", "Walking", "Other"], disabled=not is_exercise)
-        stretching = st.checkbox("Stretching?")
-
-        # LIFESTYLE
-        st.subheader("🍸 Lifestyle")
-        drinks = st.number_input("Alcohol Drinks", min_value=0, step=1)
-        luck = st.checkbox("Felt Lucky?")
+        is_ex = (exercise_done == "Yes")
+        ex_type = st.multiselect("Type", ["Lifting", "Running", "Rucking", "Walking", "Other"], disabled=not is_ex)
         
-        # MIND
-        st.subheader("🧘 Mind")
+        st.subheader("🍸 Vices & Mind")
+        drinks = st.number_input("Drinks", min_value=0, step=1)
         meditate = st.checkbox("Meditated?")
-        meditate_min = st.number_input("Minutes", min_value=0, step=1, disabled=not meditate)
-        gratitude = st.text_input("Gratitude")
+        luck = st.checkbox("Felt Lucky?")
         
         submitted = st.form_submit_button("Save Entry")
 
         if submitted:
-            # Process Data
-            vits = [n for n, v in [("D", vit_d), ("Multi", vit_m), ("C", vit_c), ("Zinc", vit_z)] if v]
-            vits_str = ", ".join(vits) if vits else "None"
+            ex_final = ", ".join(ex_type) if (is_ex and ex_type) else "Rest"
             
-            ex_final = ", ".join(exercise_type) if (is_exercise and exercise_type) else "Rest"
-            time_final = exercise_time if is_exercise else "N/A"
-
             new_entry = {
                 "Date": date,
-                "Sleep Hours": sleep_hours, "Sleep Quality": sleep_quality,
-                "Happiness": happiness, "Energy": energy_level,
-                "Headache": headache, "Vitamins": vits_str,
-                "Heartburn": heartburn, "Heartburn Notes": heartburn_notes if heartburn else "N/A",
-                "Exercise": ex_final, "Workout Time": time_final, "Stretching": stretching,
-                "Drinks": drinks, "Meditate Min": meditate_min if meditate else 0,
-                "Gratitude": gratitude, "Luck": luck
+                "Sleep": sleep_hours,
+                "Energy": energy_level,
+                "Exercise": ex_final,
+                "Drinks": drinks,
+                "Meditate": "Yes" if meditate else "No",
+                "Luck": "Yes" if luck else "No"
             }
             
             df_new = pd.DataFrame([new_entry])
-            
             if not os.path.isfile(DATA_FILE):
                 df_new.to_csv(DATA_FILE, index=False)
             else:
@@ -116,121 +105,102 @@ with st.sidebar:
             st.success("Saved!")
             st.rerun()
 
-# --- DASHBOARD TABS ---
-tab1, tab2, tab3, tab4 = st.tabs(["🗓️ Calendar View", "📊 Data Manager", "🤖 AI Coach", "📈 Trends"])
-
-# --- TAB 1: CALENDAR HEATMAP ---
-with tab1:
-    st.subheader("Month at a Glance")
+# --- MAIN DASHBOARD: THE MASTER GRID ---
+if os.path.isfile(DATA_FILE):
+    df = pd.read_csv(DATA_FILE)
+    df['Date'] = pd.to_datetime(df['Date'])
     
-    if os.path.isfile(DATA_FILE):
-        df = pd.read_csv(DATA_FILE)
-        df['Date'] = pd.to_datetime(df['Date'])
+    # Filter to Current Month (Optional: Add a month selector later)
+    current_month = datetime.now().month
+    current_year = datetime.now().year
+    
+    # 1. PREPARE THE DATA FRAME FOR THE GRID
+    # We want Columns = Day of Month (1, 2, 3...)
+    # We want Rows = Metrics
+    
+    # Create a full range of days for the current month so the grid isn't empty
+    # (Simplified: Just showing last 30 days or current month days)
+    # Let's do: All dates in the file, sorted.
+    
+    # Pivot logic:
+    df['Day'] = df['Date'].dt.day
+    df['MonthStr'] = df['Date'].dt.strftime('%B')
+    
+    # We filter for the LATEST month in the data to keep it clean
+    latest_month = df['Date'].dt.month.max()
+    df_view = df[df['Date'].dt.month == latest_month].copy()
+    
+    # Process specific columns for display
+    # Exercise -> Letters
+    df_view['Exercise'] = df_view['Exercise'].apply(get_exercise_code)
+    # Drinks -> Empty string if 0 (to clean up grid)
+    df_view['Drinks'] = df_view['Drinks'].apply(lambda x: str(int(x)) if x > 0 else "")
+    # Meditate -> M if yes
+    df_view['Meditate'] = df_view['Meditate'].apply(lambda x: "M" if x == "Yes" else "")
+    # Luck -> 🍀 if yes
+    df_view['Luck'] = df_view['Luck'].apply(lambda x: "🍀" if x == "Yes" else "")
+
+    # Set Index to Date/Day so we can pivot
+    df_pivot = df_view.set_index('Day')[['Sleep', 'Energy', 'Exercise', 'Drinks', 'Meditate', 'Luck']]
+    
+    # Transpose: Now Rows = Metrics, Columns = Days
+    df_grid = df_pivot.T
+    
+    st.subheader(f"📅 {datetime.now().strftime('%B')} Grid")
+    
+    # --- STYLING THE GRID (The "Excel" Look) ---
+    def style_master_grid(val):
+        """
+        Dynamic CSS styling based on values.
+        Returns a string like 'background-color: red; color: white'
+        """
+        style = 'text-align: center; border: 1px solid #eee;' # Default
         
-        # Filter for current month view (or all time)
-        # For simplicity, we show the last 30 days or handle it via Plotly logic
+        str_val = str(val)
         
-        # VIEW SELECTOR
-        view_option = st.selectbox("Select Lens:", ["Alcohol & Vices", "Exercise & Physio", "Sleep & Energy"])
+        # DRINKS (Red if high)
+        if str_val.isdigit() and int(str_val) >= 3: 
+             return style + 'background-color: #ffcccc; color: #cc0000; font-weight: bold;'
+        if str_val.isdigit() and int(str_val) > 0: 
+             return style + 'background-color: #fff4cc;' # Yellowish
+             
+        # EXERCISE (Green Letters)
+        if any(x in str_val for x in ['L', 'R', 'W', 'K']):
+            return style + 'background-color: #ccffcc; color: #006600; font-weight: bold;'
+            
+        # SLEEP (Red if low, Green if high)
+        try:
+            f_val = float(str_val)
+            if f_val < 6.0: return style + 'background-color: #ffcccc;' # Red
+            if f_val >= 7.5: return style + 'background-color: #ccffcc;' # Green
+        except:
+            pass
+            
+        # LUCK
+        if "🍀" in str_val:
+            return style + 'background-color: #e6f7ff;' # Light Blue
+            
+        return style
+
+    # Apply the styling
+    styled_df = df_grid.style.applymap(style_master_grid)
+    
+    # Render as a static HTML table (looks best for this specific grid view)
+    st.write(styled_df.to_html(), unsafe_allow_html=True)
+
+    st.divider()
+    
+    # --- TRENDS & RAW DATA ---
+    t1, t2 = st.tabs(["📈 Trends", "💾 Edit Data"])
+    
+    with t1:
+        st.line_chart(df.set_index("Date")[['Energy', 'Sleep']])
         
-        # Prepare Data for Heatmap
-        # We need to map Date -> Day of Week (x) and Week Number (y)
-        df = df.sort_values("Date")
-        
-        # Create a full date range to ensure the calendar looks square (handle missing days)
-        if not df.empty:
-            full_range = pd.date_range(start=df['Date'].min(), end=df['Date'].max(), freq='D')
-            df_cal = df.set_index('Date').reindex(full_range).reset_index()
-            df_cal = df_cal.rename(columns={'index': 'Date'})
-        else:
-            df_cal = df
+    with t2:
+        edited = st.data_editor(df, num_rows="dynamic")
+        if st.button("Save Changes"):
+            edited.to_csv(DATA_FILE, index=False)
+            st.success("Updated")
 
-        # Calculate coordinates
-        df_cal['Week'] = df_cal['Date'].dt.isocalendar().week
-        df_cal['Day'] = df_cal['Date'].dt.weekday # 0=Mon, 6=Sun
-        df_cal['Day Name'] = df_cal['Date'].dt.strftime('%a')
-        df_cal['Date Str'] = df_cal['Date'].dt.strftime('%b %d')
-
-        # Logic for each View
-        if view_option == "Alcohol & Vices":
-            z_data = df_cal['Drinks'].fillna(0)
-            text_data = df_cal['Drinks'].apply(lambda x: str(int(x)) if x > 0 else "")
-            colors = 'Reds' # Red scale
-            title = "Alcohol Intake (Red = Drank)"
-            
-        elif view_option == "Exercise & Physio":
-            # Map exercise strings to 1 (green) or 0 (white)
-            z_data = df_cal['Exercise'].apply(lambda x: 0 if (pd.isna(x) or x == "Rest") else 1)
-            # Get the code letter
-            text_data = df_cal['Exercise'].apply(get_exercise_code)
-            colors = 'Greens'
-            title = "Workout Consistency (Letter = Type)"
-            
-        elif view_option == "Sleep & Energy":
-            z_data = df_cal['Sleep Hours'].fillna(0)
-            text_data = df_cal['Sleep Hours'].apply(lambda x: str(x) if x > 0 else "")
-            colors = 'Blues'
-            title = "Sleep Duration (Darker = More)"
-
-        # PLOTLY HEATMAP
-        fig = go.Figure(data=go.Heatmap(
-            z=z_data,
-            x=df_cal['Day Name'],
-            y=df_cal['Week'],
-            text=text_data,
-            texttemplate="%{text}", # Show the text inside the square
-            textfont={"size": 14, "color": "grey"}, # visible on dark or light
-            colorscale=colors,
-            xgap=3, # space between squares
-            ygap=3,
-            showscale=False
-        ))
-
-        fig.update_layout(
-            title=title,
-            height=400,
-            yaxis=dict(title="Week #", dtick=1, autorange="reversed"), # Weeks go down
-            xaxis=dict(side="top") # Days on top
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Log data to see the calendar!")
-
-# --- TAB 2: DATA MANAGER ---
-with tab2:
-    if os.path.isfile(DATA_FILE):
-        df = pd.read_csv(DATA_FILE)
-        edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-        if st.button("💾 Save Changes"):
-            edited_df.to_csv(DATA_FILE, index=False)
-            st.success("Updated!")
-
-# --- TAB 3: AI COACH ---
-with tab3:
-    st.subheader("🤖 Coach Prompt Generator")
-    if os.path.isfile(DATA_FILE):
-        if st.button("Create Report"):
-            df = pd.read_csv(DATA_FILE)
-            recent = df.tail(14).to_string() # Last 14 days
-            stats = df.describe().to_string()
-            
-            prompt = f"""
-            Act as my Life Coach. Here is my last 14 days of data:
-            {recent}
-            
-            Aggregate Stats:
-            {stats}
-            
-            Analyze:
-            1. My Sleep vs Alcohol correlation.
-            2. Workout consistency (I want to lift 3x/week).
-            3. Identify any 'Red Flag' days where I crashed.
-            """
-            st.code(prompt, language="text")
-
-# --- TAB 4: TRENDS ---
-with tab4:
-    if os.path.isfile(DATA_FILE):
-        df = pd.read_csv(DATA_FILE)
-        st.line_chart(df.set_index("Date")[['Energy', 'Happiness', 'Sleep Hours']])
+else:
+    st.info("👋 Welcome! Log your first day in the sidebar to see the Grid.")
